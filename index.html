@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+
+<!-- Amazonリンクをランキング順位がついた状態で短縮してコピーできるようにし、ページ内リストに登録する-->
+<!-- AmazonのURLが特定の順番、かつスラッシュで区切られていることを利用しているので、URLの構造が変わった場合には動作しなくなる-->
+<!-- 業務内容が変わった場合、おそらくは正しく動作しなくなる-->
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Amazonランキングリンク短縮 + ダブルチェッカー v0.1</title>
+    <style>
+        /* CSSを書くところ */
+
+        .dropTextBox {
+            text-align: center;
+            margin-top: 16px;
+            margin-bottom: 16px;
+            width: 95%;
+            height: 240px;
+            border: dashed 2px #808080;
+        }
+
+        .longTextBox {
+            text-align: center;
+            margin-top: 16px;
+            margin-bottom: 16px;
+            width: 95%;
+            height: 160px;
+            border: solid 1px #808080;
+        }
+
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 5px;
+            padding: 16px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            font-size: 17px;
+        }
+
+            .toast.show {
+                visibility: visible;
+                animation: fadein 0.5s, fadeout 0.5s 2.5s;
+            }
+
+        @keyframes fadein {
+            from {
+                bottom: 0;
+                opacity: 0;
+            }
+
+            to {
+                bottom: 30px;
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeout {
+            from {
+                bottom: 30px;
+                opacity: 1;
+            }
+
+            to {
+                bottom: 0;
+                opacity: 0;
+            }
+        }
+
+        .title {
+            font-size: 24px;
+            margin-top: 16px;
+            margin-bottom: 16px;
+        }
+
+        .status {
+            font-size: 32px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+
+        .next {
+            font-size: 32px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+
+        .end {
+            font-size: 16px;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+
+        .linklist {
+
+        }
+
+        .linklistbody {
+            
+        }
+
+        .linklistelement {
+            height: 24px;
+            width: 480px;
+        }
+    </style>
+</head>
+
+<body onload="load();">
+
+    <!-- 実際に表示される領域 -->
+
+    <script>
+        // JavaScriptを書くところ
+
+        let list_url = new Array(0);
+
+        // テスト用処理 : リストに48番目の要素を追加
+        // list_url[47] = 'test';
+
+        // テスト用処理 : リストに98番目の要素を追加
+        // list_url[97] = 'test';
+
+
+
+        function load() {
+            // console.log('load');
+            var status = document.querySelector('.status');
+            var next = document.querySelector('.next');
+            status.textContent = 'リンク短縮の準備完了';
+            next.textContent = '次は ' + parseInt(list_url.length + 1) + ' 位のリンクです';
+
+            // トースト通知
+            showToast('準備完了');
+
+            var zone = document.querySelector('.dropTextBox');
+            zone.addEventListener('mouseover', onmouseover, false);
+            zone.addEventListener('mouseleave', onmouseleave, false);
+            zone.addEventListener('dragover', onDragOver, false);
+            zone.addEventListener('drop', onDrop, false);
+            zone.addEventListener('paste', onPasteTimeOut, false);
+            zone.addEventListener('click', onClick_select, false);
+
+            var text = document.querySelector('.longTextBox');
+            text.addEventListener('mouseover', onmouseover, false);
+            text.addEventListener('mouseleave', onmouseleave, false);
+            text.addEventListener('click', onClick_copy, false);
+        }
+
+        function write_url(input_url) {
+            // 送られてきたランキングURLを既存のリストと照合し、重複がないか、順序が適正かを判定する
+
+            // リンク入出力用input
+            var dropTextBox = document.querySelector('.dropTextBox');
+            var longTextBox = document.querySelector('.longTextBox');
+
+            // 状態出力用div
+            var status = document.querySelector('.status');
+            var next = document.querySelector('.next');
+            var end = document.querySelector('.end');
+
+            // ページ内テーブル
+            var tbl = document.querySelector('.linklist');
+            var tblbody = document.querySelector('.linklistbody');
+
+            // エラー判定フラグ
+            let error = false;
+
+            // 短縮処理
+            let recent_url = split_url(input_url);
+
+
+            // 特別処理
+
+            // テスト用処理
+            //console.log(recent_url);
+
+            // リストの長さが51以上80以下の場合の特別処理
+
+            // リストの長さが51以上80以下、かつリンク内ランキング順位が1以上30以下の場合 :
+            // AmazonランキングURLの数値設定ミス(？)の補正のため、リンク内ランキング順位に50を加算する
+            if (list_url.length >= 50 && list_url.length <= 80 && recent_url[1] <= 30) {
+                // console.log('特別処理の条件を満たしました : 50 >= list_url.length >= 80');
+                recent_url[1] = recent_url[1] + 50;
+                // console.log('recent_url[1] = ' + recent_url[1]);
+            }
+
+            // リストの長さが100以上の場合の特別処理
+
+            // リストの長さが100以上の場合 :
+            // リストとテーブルをクリアする
+            if (list_url.length >= 100) {
+                // console.log('特別処理の条件を満たしました : list_url.length >= 100')
+                list_url.splice(0, list_url.length);
+                tblbody.innerHTML = '';
+
+            }
+
+            // リストの長さが1以下の場合の特別処理
+            // 終了時divをクリアする
+            if (list_url.length <= 1) {
+                end.textContent = ' ';
+            }
+            // リンクを短縮
+
+
+            // URLが定形外ならエラー
+            if (recent_url[2] == false && error == false) {
+
+                // console.log('不明な内容です');
+
+                status.textContent = '不明な内容です';
+                error = true;
+
+            }
+
+            // 登録済みURLと重複があればエラー
+            if (list_url.indexOf(recent_url[0]) != -1 && error == false) {
+
+                // console.log('順位 ' + parseInt(recent_url[1]) + ' 位のリンクは短縮済みです');
+
+                status.textContent = '順位 ' + recent_url[1] + ' 位のリンクは短縮済みです';
+                error = true;
+
+            }
+
+            // 登録済みURLと連番でなければエラー
+            if (recent_url[1] != list_url.length + 1 && error == false) {
+
+                // console.log('順位 ' + parseInt(recent_url[1]) + ' 位のリンクは順序が異なります');
+
+                status.textContent = '順位 ' + recent_url[1] + ' 位のリンクは順序が異なります';
+                error = true;
+
+            }
+
+            // エラーがなければ、リストの末尾に書き込みを行う
+            if (error == true) {
+
+                // console.log('リストに追加しません')
+
+                // リンクは出力しない
+                longTextBox.value = '';
+
+            } else {
+
+                // リストの末尾に書き込みを行う
+                list_url[list_url.length] = recent_url[0];
+
+                // console.log('順位 ' + list_url.length + ' 位のリンクを短縮しました');
+
+                status.textContent = '順位 ' + list_url.length + ' 位のリンクを短縮しました';
+
+                // console.log(list_url[list_url.length - 1]);
+
+                // リンクを出力
+                longTextBox.value = recent_url[0];
+
+
+
+                // ページ内テーブルにリスト内容を登録
+
+                // 表の行を作成
+                let row = document.createElement('tr');
+
+                // 表のセルを作成
+
+                // 順位列
+                let cell1 = document.createElement('td');
+                let cell1text = document.createTextNode('#' + recent_url[1]);
+                cell1.appendChild(cell1text);
+
+                row.appendChild(cell1);
+
+                // リンク列
+                let cell2 = document.createElement('td');
+                let cell2text = document.createElement('input');
+
+                cell2text.setAttribute('class', 'linklistelement');
+                cell2text.setAttribute('type', 'text');
+                cell2text.setAttribute('value', recent_url[0]);
+
+                cell2text.addEventListener('mouseover', onmouseover, false);
+                cell2text.addEventListener('mouseleave', onmouseleave, false);
+                cell2text.addEventListener('click', onClick_copy, false);
+
+                cell2.appendChild(cell2text);
+
+                row.appendChild(cell2);
+
+                tblbody.appendChild(row);
+
+
+
+            }
+            // リストの長さが100でなければ、次の要素を案内する
+            if (list_url.length < 100) {
+                // console.log('次は ' + (list_url.length + 1) + ' 位のリンクです');
+
+                next.textContent = '次は ' + (list_url.length + 1) + ' 位のリンクです';
+
+            } else {
+                // console.log('順位 100 位までの短縮処理が完了しました')
+
+                next.textContent = '順位 100 位までの短縮処理が完了しました';
+                end.textContent = '順位 1 位のリンクを短縮するか、F5 キーを押してください';
+
+            }
+            // テスト用配列全表示
+            // console.log(list_url);
+
+        }
+
+        function split_url(input_url) {
+            // 送られてきたランキングURLを分解し、ASINとランキング順位を取り出す
+            // AmazonのURLが特定の順番、かつスラッシュで区切られていることを利用しているので、URLの構造が変わった場合には動作しなくなる
+
+            let rank_url;
+            let recombine_url = new Array(3);
+            let split_url = input_url.split('/');
+            // console.log(split_url);
+
+            // amazon.comのURLでなければエラーを出す
+            if (split_url[2].indexOf('www.amazon.co.jp') != -1) {
+                //console.log('amazonのURLを確認');
+            } else {
+                // エラー部分
+                recombine_url = ['', -1, false];
+                // console.log('不明なURLを確認');
+                return recombine_url;
+            }
+
+            // 順位がなければエラーを出す
+            if (split_url[6].indexOf('sccl_') != -1) {
+                rank_url = parseInt(split_url[6].slice(split_url[6].indexOf('sccl_') + 5));
+                // console.log('ランキング順位は ' + rank_url + ' 位');
+            } else {
+                // エラー部分
+                recombine_url = ['', -1, false];
+                // console.log('ランキング順位を確認できず');
+                return recombine_url;
+            }
+
+            // amazon.comのURLかつ順位があれば、URLと順位を返す
+            if (split_url[2].indexOf('www.amazon.co.jp') != -1) {
+                if (split_url[6].indexOf('sccl_') != -1) {
+                    recombine_url[0] = split_url[2] + '/' + split_url[4] + '/' + split_url[5] + '/' + split_url[6];
+                    // console.log('recombine_url = ' + recombine_url);
+                    recombine_url[1] = rank_url;
+                    recombine_url[2] = true;
+                }
+            }
+            return recombine_url;
+        }
+
+        // トースト通知(丸コピ)
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast show';
+            setTimeout(() => {
+                toast.className = toast.className.replace('show', '');
+            }, 3000);
+        }
+
+
+
+        function onDragOver(e) {
+            // console.log('ondragover');
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'link';
+
+        }
+
+        function onDrop(e) {
+            // console.log('ondrop');
+            e.preventDefault();
+
+            var dropTextBox = document.querySelector('.dropTextBox');
+
+            var url = event.dataTransfer.getData("text");
+            dropTextBox.value = url;
+
+            // メイン処理
+            write_url(url);
+        }
+
+        function onPasteTimeOut(e) {
+
+            // 処理の都合上、100ms遅延
+            var pastetimeout = setTimeout(onPaste, 100);
+
+        }
+
+        function onPaste(e) {
+            // onDropとほぼ同じ内容
+            // console.log('onpaste');
+            // e.preventDefault();
+
+            var dropTextBox = document.querySelector('.dropTextBox');
+
+            var url = dropTextBox.value;
+
+            // メイン処理
+            write_url(url);
+        }
+
+
+
+        function onmouseover(e) {
+            this.select();
+            // console.log('マウスカーソルの進入を検知');
+        }
+
+        function onmouseleave(e) {
+            this.blur();
+            // console.log('マウスカーソルの離脱を検知');
+        }
+
+        function onClick_select(e) {
+            // console.log('クリックを検知');
+            e.preventDefault();
+            this.select();
+        }
+
+        async function onClick_copy(e) {
+
+            e.preventDefault();
+            this.select();
+            // console.log('クリックを検知');
+            if (this.value != '') {
+                try {
+                    await navigator.clipboard.writeText(this.value);
+                    // console.log('リンクをクリップボードにコピーしました');
+                    // トースト通知
+                    showToast('クリップボードにコピーしました');
+
+                } catch (err) {
+                    // console.error('リンクのコピーに失敗: ', err);
+                    // トースト通知
+                    showToast('コピーに失敗: ' + err);
+
+                }
+            }
+        }
+
+
+    </script>
+
+
+
+    <div class="title">Amazonランキングリンク短縮 + ダブルチェッカー v0.1</div>
+    <div class="status">待機中……</div>
+    <div class="next">次は n 位のリンクです</div>
+    <div class="end"> </div>
+    <hr />
+    <div>下のボックスに貼りつけたAmazonリンクを短縮<br />貼りつけるか、リンクをドラッグアンドドロップ</div>
+    <input id="dropTextBox" class="dropTextBox" type="text" value="ここにAmazonリンクを貼りつけ" />
+    <div>下のボックスに短縮Amazonリンクを表示<br />ボックスをクリックでクリップボードにコピー、<br />またはテキストをドラッグアンドドロップ</div>
+    <input id="OutputTextBox" class="longTextBox" type="text" value="ここに短縮Amazonリンクが出現" />
+    <div id="toast" class="toast"></div>
+    <hr />
+    <div>短縮済みリンク一覧表<br />ボックスをクリックでクリップボードにコピー、<br />またはテキストをドラッグアンドドロップ</div>
+    <table class="linklist">
+        <thead>
+            <tr>
+                <th>順位</th>
+                <th>リンク</th>
+            </tr>
+        </thead>
+        <tbody class="linklistbody">
+            <tr>
+                <td></td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+
+
+</body>
+
+</html>
